@@ -1,0 +1,54 @@
+name: Publish One Page Daily
+
+on:
+  schedule:
+    # Runs automatically once every day at midnight UTC
+    - cron: '0 0 * * *'
+  # Allows you to test it anytime manually
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # CHANGE THIS TO YOUR ACTUAL WEBSITE URL (NO SLASH AT THE END)
+  SITE_URL: "https://howlongisinch.com/"
+
+jobs:
+  publish-page:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Move Draft and Update Sitemap
+        run: |
+          if [ -d "_drafts" ] && [ "$(ls -A _drafts/*.html 2>/dev/null)" ]; then
+            NEXT_FILE=$(ls _drafts/*.html | head -n 1)
+            FILENAME=$(basename "$NEXT_FILE")
+            TODAY=$(date -u +"%Y-%m-%d")
+
+            echo "Publishing: $FILENAME"
+
+            git mv "$NEXT_FILE" "./$FILENAME"
+
+            if [ -f "sitemap.xml" ]; then
+              NEW_ENTRY="  <url>\n    <loc>${SITE_URL}/${FILENAME}</loc>\n    <lastmod>${TODAY}</lastmod>\n    <priority>0.8</priority>\n  </url>"
+              sed -i "/<\/urlset>/i \\${NEW_ENTRY}" sitemap.xml
+              git add sitemap.xml
+            fi
+
+            if [ -z "$(ls -A _drafts)" ]; then
+              rmdir _drafts
+            fi
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "Auto-published: $FILENAME and updated sitemap.xml"
+            git push
+          else
+            echo "No draft pages left to publish."
+          fi
